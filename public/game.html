@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retro Rocket Control Console</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="console-container" id="console">
+    <button class="fullscreen-toggle" id="fullscreen-btn">
+      <div class="fullscreen-icon"></div>
+      <span>FULLSCREEN</span>
+    </button>
+    
+    <div class="console-header">
+      <h1 class="mission-title">ROCKET CONTROL</h1>
+      <div class="console-status">
+        <div class="status-light active"></div>
+        <span>SYSTEM ACTIVE</span>
+      </div>
+    </div>
+    
+    <div class="console-body">
+      <div class="console-panel">
+        <h2 class="panel-title">SYSTEMS CONTROL</h2>
+        
+        <div class="toggle-switch-container">
+          <div class="toggle-switch">
+            <div class="switch" id="power-switch"></div>
+            <span class="switch-label">POWER</span>
+          </div>
+          <div class="toggle-switch">
+            <div class="switch" id="comms-switch"></div>
+            <span class="switch-label">COMMS</span>
+          </div>
+          <div class="toggle-switch">
+            <div class="switch" id="nav-switch"></div>
+            <span class="switch-label">NAV</span>
+          </div>
+          <div class="toggle-switch">
+            <div class="switch" id="life-switch"></div>
+            <span class="switch-label">LIFE</span>
+          </div>
+        </div>
+        
+        <div class="preset-group">
+          <div class="preset-header" id="launch-presets-header">
+            <span>LAUNCH PRESETS</span>
+            <div class="dropdown-arrow"></div>
+          </div>
+          <div class="preset-content" id="launch-presets-content">
+            <button class="preset-button">LOW ORBIT</button>
+            <button class="preset-button">HIGH ORBIT</button>
+            <button class="preset-button">LUNAR</button>
+            <button class="preset-button">MARS</button>
+            <button class="preset-button">DEEP SPACE</button>
+            <button class="preset-button">RETURN</button>
+          </div>
+        </div>
+        
+        <div class="sliders-container">
+          <div class="slider-wrapper">
+            <div class="slider-value">75</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 75%"></div>
+              <div class="slider-handle" style="bottom: 75%"></div>
+            </div>
+            <div class="slider-label">THRUST</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">60</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 60%"></div>
+              <div class="slider-handle" style="bottom: 60%"></div>
+            </div>
+            <div class="slider-label">ALT</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">45</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 45%"></div>
+              <div class="slider-handle" style="bottom: 45%"></div>
+            </div>
+            <div class="slider-label">FUEL</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">80</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 80%"></div>
+              <div class="slider-handle" style="bottom: 80%"></div>
+            </div>
+            <div class="slider-label">SPEED</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">35</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 35%"></div>
+              <div class="slider-handle" style="bottom: 35%"></div>
+            </div>
+            <div class="slider-label">TEMP</div>
+          </div>
+        </div>
+        
+        <div class="led-panel">
+          <div class="led" id="led1"></div>
+          <div class="led" id="led2"></div>
+          <div class="led" id="led3"></div>
+          <div class="led" id="led4"></div>
+          <div class="led" id="led5"></div>
+          <div class="led" id="led6"></div>
+          <div class="led" id="led7"></div>
+          <div class="led" id="led8"></div>
+        </div>
+        
+        <div class="knobs-section">
+          <div class="knob">
+            <div class="knob-dial" id="thrust-knob">
+              <div class="knob-marker"></div>
+            </div>
+            <span class="knob-label">THRUST</span>
+          </div>
+          <div class="knob">
+            <div class="knob-dial" id="stabilizer-knob">
+              <div class="knob-marker"></div>
+            </div>
+            <span class="knob-label">STABILIZER</span>
+          </div>
+        </div>
+        
+        <div class="buttons-section">
+          <button class="control-button btn-green">IGNITE</button>
+          <button class="control-button btn-yellow">TEST</button>
+          <button class="control-button btn-red">ABORT</button>
+        </div>
+      </div>
+      
+      <div class="main-screen">
+        <div class="screen-scan-line"></div>
+        <div class="screen-content" id="terminal-output">
+          > SYSTEM BOOT SEQUENCE INITIATED...
+        </div>
+      </div>
+      
+      <div class="console-panel">
+        <h2 class="panel-title">DIAGNOSTICS</h2>
+        
+        <div class="preset-group">
+          <div class="preset-header" id="system-presets-header">
+            <span>SYSTEM PRESETS</span>
+            <div class="dropdown-arrow"></div>
+          </div>
+          <div class="preset-content" id="system-presets-content">
+            <button class="preset-button">NORMAL</button>
+            <button class="preset-button">ECONOMY</button>
+            <button class="preset-button">MAX POWER</button>
+            <button class="preset-button">EMERGENCY</button>
+            <button class="preset-button">STANDBY</button>
+            <button class="preset-button">SLEEP</button>
+          </div>
+        </div>
+        
+        <div class="sliders-container">
+          <div class="slider-wrapper">
+            <div class="slider-value">65</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 65%"></div>
+              <div class="slider-handle" style="bottom: 65%"></div>
+            </div>
+            <div class="slider-label">O₂</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">70</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 70%"></div>
+              <div class="slider-handle" style="bottom: 70%"></div>
+            </div>
+            <div class="slider-label">HULL</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">55</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 55%"></div>
+              <div class="slider-handle" style="bottom: 55%"></div>
+            </div>
+            <div class="slider-label">ORBIT</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">40</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 40%"></div>
+              <div class="slider-handle" style="bottom: 40%"></div>
+            </div>
+            <div class="slider-label">POWER</div>
+          </div>
+          <div class="slider-wrapper">
+            <div class="slider-value">85</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="height: 85%"></div>
+              <div class="slider-handle" style="bottom: 85%"></div>
+            </div>
+            <div class="slider-label">PRESS</div>
+          </div>
+        </div>
+        
+        <div class="gauges-section">
+          <div class="gauge">
+            <h3 class="gauge-title">FUEL</h3>
+            <div class="gauge-scale">
+              <div class="gauge-value" id="fuel-gauge" style="width: 85%;"></div>
+            </div>
+            <div class="gauge-markings">
+              <span>0</span>
+              <span>50</span>
+              <span>100</span>
+            </div>
+          </div>
+          
+          <div class="gauge">
+            <h3 class="gauge-title">OXYGEN</h3>
+            <div class="gauge-scale">
+              <div class="gauge-value" id="oxygen-gauge" style="width: 92%;"></div>
+            </div>
+            <div class="gauge-markings">
+              <span>0</span>
+              <span>50</span>
+              <span>100</span>
+            </div>
+          </div>
+          
+          <div class="gauge">
+            <h3 class="gauge-title">TEMPERATURE</h3>
+            <div class="gauge-scale">
+              <div class="gauge-value" id="temp-gauge" style="width: 45%;"></div>
+            </div>
+            <div class="gauge-markings">
+              <span>LOW</span>
+              <span>MID</span>
+              <span>HIGH</span>
+            </div>
+          </div>
+          
+          <div class="gauge">
+            <h3 class="gauge-title">PRESSURE</h3>
+            <div class="gauge-scale">
+              <div class="gauge-value" id="pressure-gauge" style="width: 60%;"></div>
+            </div>
+            <div class="gauge-markings">
+              <span>LOW</span>
+              <span>MID</span>
+              <span>HIGH</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="buttons-section" style="margin-top: auto;">
+          <button class="control-button btn-blue" id="run-diagnostics">DIAGNOSTICS</button>
+          <button class="control-button" id="clear-alarm">CLEAR ALARM</button>
+          <button class="control-button btn-yellow" id="auto-sequence">AUTO SEQ</button>
+        </div>
+        
+        <div class="preset-group">
+          <div class="preset-header" id="custom-programs-header">
+            <span>CUSTOM PROGRAMS</span>
+            <div class="dropdown-arrow"></div>
+          </div>
+          <div class="preset-content" id="custom-programs-content">
+            <button class="preset-button">SYNC ORBIT</button>
+            <button class="preset-button">AUTOLANDING</button>
+            <button class="preset-button">DOCKING</button>
+            <button class="preset-button">MAPPING</button>
+            <button class="preset-button">SCAN MODE</button>
+            <button class="preset-button">COMM CHECK</button>
+            <button class="preset-button">DIAGNOSTICS</button>
+            <button class="preset-button">CALIBRATE</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="console-footer">
+      <div class="system-readout">
+        STATUS: <span class="readout-value">STANDBY</span>
+      </div>
+      
+      <div class="system-readout" id="countdown">
+        T-MINUS: <span class="readout-value">00:00:00</span>
+      </div>
+      
+      <div class="launch-container">
+        <div class="launch-cover" id="launch-cover">ARMED</div>
+        <button class="launch-button" id="launch-button">LAUNCH</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
