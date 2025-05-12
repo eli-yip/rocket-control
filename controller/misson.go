@@ -5,6 +5,7 @@ import (
 
 	"github.com/eli-yip/rocket-control/db"
 	"github.com/labstack/echo/v4"
+	"github.com/rezakhademix/govalidator/v2"
 	"go.uber.org/zap"
 )
 
@@ -33,6 +34,16 @@ func (h *MissionHandler) AddMission(c echo.Context) (err error) {
 	if err = c.Bind(&req); err != nil {
 		logger.Error("failed to bind request", zap.Error(err))
 		return c.JSON(http.StatusBadRequest, WrapResp("failed to bind request"))
+	}
+
+	v := govalidator.New()
+	v.RequiredString(req.Name, "name", "name is required")
+	v.RequiredInt(req.Duration, "duration", "duration is required")
+	if v.IsFailed() {
+		for k, v := range v.Errors() {
+			logger.Error("validation failed", zap.String("field", k), zap.String("error", v))
+		}
+		return c.JSON(http.StatusBadRequest, WrapRespWithData("validation failed", v.Errors()))
 	}
 
 	mission, err := h.db.AddMission(req.Name, user, req.Duration)
