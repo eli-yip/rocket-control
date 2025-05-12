@@ -7,6 +7,34 @@ import (
 	"gorm.io/gorm"
 )
 
+type MockDB interface {
+	MissionIface
+}
+
+type baseModel struct {
+	ID        uint           `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+}
+
+type MissionIface interface {
+	AddMission(name, user string, duration int, opts ...MissionOptFunc) (*Mission, error)
+	UpdateMissionStatus(id uint, status MissionStatus) error
+	GetMission(id uint) (*Mission, error)
+	GetMissionList() ([]*Mission, error)
+}
+
+type MissionOptFunc func(m *Mission)
+
+func WithMissionSuccessRate(rate float64) MissionOptFunc {
+	return func(m *Mission) { m.SuccessRate = rate }
+}
+
+func WithMissionDesc(desc string) MissionOptFunc {
+	return func(m *Mission) { m.Desc = desc }
+}
+
 type MissionStatus int
 
 const (
@@ -17,9 +45,11 @@ const (
 	MissionStatusCancelled
 )
 
+const DefaultSuccessRate float64 = 98.0
+
 // Mission 表示用户创建的一个任务
 type Mission struct {
-	gorm.Model
+	baseModel
 
 	Name        string        `gorm:"unique,type:text"` // 任务名称
 	Desc        string        `gorm:"type:text"`        // 任务描述
@@ -32,7 +62,7 @@ type Mission struct {
 }
 
 type SystemState struct {
-	gorm.Model
+	baseModel
 	MissionID uint `gorm:"index"`
 	RocketSetting
 	RocketStatus
@@ -67,7 +97,7 @@ type RocketStatus struct {
 }
 
 type SystemPreset struct {
-	gorm.Model
+	baseModel
 	Name string `gorm:"unique,type:text"` // 预设名称
 	Desc string `gorm:"type:text"`        // 预设描述
 	RocketSetting
@@ -83,7 +113,7 @@ type ProgramStep struct {
 type ProgramSteps []ProgramStep
 
 type CustomProgram struct {
-	gorm.Model
+	baseModel
 	IsSystem bool         `gorm:"type:bool"`                        // 是否是系统预设
 	Name     string       `gorm:"unique,type:text"`                 // 程序名称
 	Desc     string       `gorm:"type:text"`                        // 程序描述
@@ -126,7 +156,7 @@ const (
 )
 
 type Event struct {
-	gorm.Model
+	baseModel
 	MissionID uint      `gorm:"index"`
 	CreatedBy string    `gorm:"type:text"` // 创建者
 	Desc      string    `gorm:"type:text"` // 事件描述
@@ -137,7 +167,7 @@ type Event struct {
 
 // TODO: 使用时序数据库储存遥测数据
 type Telemetry struct {
-	gorm.Model
+	baseModel
 	MissionID uint `gorm:"index"`
 	RocketSetting
 	RocketStatus

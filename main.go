@@ -51,12 +51,14 @@ func main() {
 	}()
 
 	db, err := initService(logger)
+	fmt.Println("db", db)
 	if err != nil {
 		logger.Fatal("Failed to init service", zap.Error(err))
 	}
 	logger.Info("Init services successfully")
 
-	e := setupEcho(db, logger)
+	// TODO: use real db interface impl
+	e := setupEcho(nil, logger)
 	logger.Info("Init echo server successfully")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

@@ -8,10 +8,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
+
+	"github.com/eli-yip/rocket-control/controller"
+	"github.com/eli-yip/rocket-control/db"
 )
 
-func setupEcho(db *gorm.DB, logger *zap.Logger) (e *echo.Echo) {
+func setupEcho(db db.MockDB, logger *zap.Logger) (e *echo.Echo) {
 	e = echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -53,10 +55,19 @@ func setupEcho(db *gorm.DB, logger *zap.Logger) (e *echo.Echo) {
 		InjectLogger(logger), // inject logger to context
 	)
 
+	missionHandler := controller.NewMissionHandler(db)
+
 	apiGroup := e.Group("/api/v1")
 
 	healthEndpoint := apiGroup.GET("/health", func(c echo.Context) error { return c.JSON(http.StatusOK, map[string]string{"status": "ok"}) })
 	healthEndpoint.Name = "Health check route"
+
+	missionAPI := apiGroup.Group("/mission")
+	missionAPI.Use(InjectUser())
+	missionAPI.GET("/:id", missionHandler.GetMission)
+	missionAPI.GET("", missionHandler.GetMissionList)
+	missionAPI.POST("", missionHandler.AddMission)
+	missionAPI.PATCH("/:id", missionHandler.UpdateMissionStatus)
 
 	// iterate all routes and log them
 	for _, r := range e.Routes() {
