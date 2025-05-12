@@ -55,19 +55,26 @@ func setupEcho(db db.MockDB, logger *zap.Logger) (e *echo.Echo) {
 		InjectLogger(logger), // inject logger to context
 	)
 
-	missionHandler := controller.NewMissionHandler(db)
-
 	apiGroup := e.Group("/api/v1")
 
 	healthEndpoint := apiGroup.GET("/health", func(c echo.Context) error { return c.JSON(http.StatusOK, map[string]string{"status": "ok"}) })
 	healthEndpoint.Name = "Health check route"
 
+	missionHandler := controller.NewMissionHandler(db)
 	missionAPI := apiGroup.Group("/mission")
 	missionAPI.Use(InjectUser())
 	missionAPI.GET("/:id", missionHandler.GetMission)
 	missionAPI.GET("", missionHandler.GetMissionList)
 	missionAPI.POST("", missionHandler.AddMission)
 	missionAPI.PATCH("/:id", missionHandler.UpdateMissionStatus)
+
+	diagnosticHandler := controller.NewDiagnosticHandler(db)
+	diagnosticAPI := apiGroup.Group("/diagnostic")
+	diagnosticAPI.Use(InjectUser())
+	diagnosticAPI.GET("/:id", diagnosticHandler.GetDiagnostic)
+	diagnosticAPI.GET("", diagnosticHandler.GetDiagnosticList)
+	diagnosticAPI.POST("", diagnosticHandler.CreateDiagnostic)
+	diagnosticAPI.PATCH("/:id", diagnosticHandler.UpdateDiagnosticStatus)
 
 	// iterate all routes and log them
 	for _, r := range e.Routes() {

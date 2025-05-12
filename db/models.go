@@ -173,4 +173,6 @@ type Telemetry struct {
 	RocketStatus
 }
 
+type DiagnosticIface any
+
 type Diagnostic struct{}
