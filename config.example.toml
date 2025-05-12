@@ -1,0 +1,9 @@
+[settings]
+debug = false
+
+[database]
+host = ""
+port = ""
+user = ""
+password = ""
+name = ""

@@ -1,0 +1,146 @@
+package db
+
+import (
+	"time"
+
+	"github.com/jackc/pgx/pgtype"
+	"gorm.io/gorm"
+)
+
+type MissionStatus int
+
+const (
+	MissionStatusPending MissionStatus = iota
+	MissionStatusInProgress
+	MissionStatusCompleted
+	MissionStatusFailed
+	MissionStatusCancelled
+)
+
+// Mission 表示用户创建的一个任务
+type Mission struct {
+	gorm.Model
+
+	Name        string        `gorm:"unique,type:text"` // 任务名称
+	Desc        string        `gorm:"type:text"`        // 任务描述
+	Status      MissionStatus `gorm:"type:int"`         // 任务状态
+	StartTime   time.Time     `gorm:"type:timestamptz"` // 任务开始时间
+	EndTime     time.Time     `gorm:"type:timestamptz"` // 任务结束时间
+	Duration    int           `gorm:"type:int"`         // 预估任务持续事件（分钟）
+	SuccessRate float64       `gorm:"type:float"`       // 任务成功率
+	CreatedBy   string        `gorm:"type:text"`        // 创建者
+}
+
+type SystemState struct {
+	gorm.Model
+	MissionID uint `gorm:"index"`
+	RocketSetting
+	RocketStatus
+}
+
+type RocketSetting struct {
+	Power bool `gorm:"type:bool"`
+	Comms bool `gorm:"type:bool"`
+	Nav   bool `gorm:"type:bool"`
+	Life  bool `gorm:"type:bool"`
+
+	Thrust      float64 `gorm:"type:float"` // 推力水平
+	Altitude    float64 `gorm:"type:float"` // 高度水平
+	Fuel        float64 `gorm:"type:float"` // 燃料水平
+	Speed       float64 `gorm:"type:float"` // 速度水平
+	Temperature float64 `gorm:"type:float"` // 温度水平
+
+	Stabilizer float64 `gorm:"type:float"` // 稳定器水平
+
+	Oxygen     float64 `gorm:"type:float"` // 氧气水平
+	Orbit      float64 `gorm:"type:float"` // 轨道水平
+	PowerLevel float64 `gorm:"type:float"` // 电量水平
+	Pressure   float64 `gorm:"type:float"` // 压力水平
+}
+
+type RocketStatus struct {
+	HullLevel        float64 `gorm:"type:float"` // 船体完整性
+	FuelLevel        float64 `gorm:"type:float"`
+	OxygenLevel      float64 `gorm:"type:float"`
+	TemperatureLevel float64 `gorm:"type:float"`
+	PressureLevel    float64 `gorm:"type:float"`
+}
+
+type SystemPreset struct {
+	gorm.Model
+	Name string `gorm:"unique,type:text"` // 预设名称
+	Desc string `gorm:"type:text"`        // 预设描述
+	RocketSetting
+}
+
+// 自定义火箭程序的单步操作
+type ProgramStep struct {
+	EventType EventType `gorm:"type:text"` // 事件类型
+	Desc      string    `gorm:"type:text"` // 事件描述
+	Duration  int       `gorm:"type:int"`  // 持续时间（秒）
+}
+
+type ProgramSteps []ProgramStep
+
+type CustomProgram struct {
+	gorm.Model
+	IsSystem bool         `gorm:"type:bool"`                        // 是否是系统预设
+	Name     string       `gorm:"unique,type:text"`                 // 程序名称
+	Desc     string       `gorm:"type:text"`                        // 程序描述
+	Steps    pgtype.JSONB `gorm:"type:jsonb;default:'[]';not null"` // 程序步骤
+}
+
+type EventType string
+
+const (
+	EventTypeJoin  EventType = "join"
+	EventTypeLeave EventType = "leave"
+
+	EventTypeLanuch EventType = "launch"
+	EventTypeAbort  EventType = "abort"
+	EventTypeLand   EventType = "land"
+	EventTypeTest   EventType = "test"
+
+	EventTypeDiagnose      EventType = "diagnose"
+	EventTypeClearDiagnose EventType = "clear_diagnose"
+
+	// 通过影响火箭设置来影响火箭状态的事件
+	EventTypeCustom     EventType = "custom"
+	EventTypeThrust     EventType = "thrust"
+	EventTypeAlt        EventType = "altitude"
+	EventTypeFuel       EventType = "fuel"
+	EventTypeSpeed      EventType = "speed"
+	EventTypeTemp       EventType = "temperature"
+	EventTypeStabilizer EventType = "stabilizer"
+	EventTypeOxygen     EventType = "oxygen"
+	EventTypeOrbit      EventType = "orbit"
+	EventTypePowerLevel EventType = "power_level"
+	EventTypePressure   EventType = "pressure"
+
+	// 直接影响火箭状态的事件
+	EventTypeHullChange     EventType = "hull_change"
+	EventTypeFuelChange     EventType = "fuel_change"
+	EventTypeOxygenChange   EventType = "oxygen_change"
+	EventTypeTempChange     EventType = "temperature_change"
+	EventTypePressureChange EventType = "pressure_change"
+)
+
+type Event struct {
+	gorm.Model
+	MissionID uint      `gorm:"index"`
+	CreatedBy string    `gorm:"type:text"` // 创建者
+	Desc      string    `gorm:"type:text"` // 事件描述
+	PartOf    uint      `gorm:"index"`     // 父事件
+	Type      EventType `gorm:"type:text"`
+	Value     string    `gorm:"type:text"`
+}
+
+// TODO: 使用时序数据库储存遥测数据
+type Telemetry struct {
+	gorm.Model
+	MissionID uint `gorm:"index"`
+	RocketSetting
+	RocketStatus
+}
+
+type Diagnostic struct{}
