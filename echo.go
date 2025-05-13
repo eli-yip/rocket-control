@@ -75,7 +75,6 @@ func setupEcho(db db.Iface, logger *zap.Logger) (e *echo.Echo) {
 	diagnosticAPI.GET("/:id", diagnosticHandler.GetDiagnostic)
 	diagnosticAPI.GET("", diagnosticHandler.GetDiagnosticList)
 	diagnosticAPI.POST("", diagnosticHandler.CreateDiagnostic)
-	diagnosticAPI.PATCH("/:id", diagnosticHandler.UpdateDiagnosticStatus)
 
 	mission.InitMissionService(db)
 	rocketHandler := controller.NewRocketController(mission.MissionServiceInstance)
