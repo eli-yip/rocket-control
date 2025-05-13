@@ -57,12 +57,6 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 		logger:   log.DefaultLogger.With(zap.Uint("mission", mission.ID)),
 	}
 
-	go sms.process()
-	go sms.adjustStatus()
-	go sms.telemetry()
-	go sms.accident()
-	go sms.processAccident()
-
 	return sms, nil
 }
 
@@ -76,6 +70,15 @@ func (s *SingleMissionService) JoinMission(user string) (<-chan Event, error) {
 
 	ch := make(chan Event, eventBufferSize)
 	s.members[user] = ch
+
+	if len(s.members) == 1 {
+		s.logger.Info("first user joined, starting mission service")
+		go s.process()
+		go s.adjustStatus()
+		go s.telemetry()
+		go s.accident()
+		go s.processAccident()
+	}
 
 	joinEvent := Event{
 		EventType: db.EventTypeJoin,
@@ -106,6 +109,12 @@ func (s *SingleMissionService) LeaveMission(user string) (err error) {
 
 	close(s.members[user])
 	delete(s.members, user)
+
+	if len(s.members) == 0 {
+		s.logger.Info("all users left, stopping mission service")
+		s.done <- struct{}{}
+	}
+
 	return nil
 }
 
