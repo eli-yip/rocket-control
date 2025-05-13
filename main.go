@@ -50,15 +50,14 @@ func main() {
 		}()
 	}()
 
-	db, err := initService(logger)
-	fmt.Println("db", db)
+	gormDB, err := initService(logger)
 	if err != nil {
 		logger.Fatal("Failed to init service", zap.Error(err))
 	}
 	logger.Info("Init services successfully")
 
-	// TODO: use real db interface impl
-	e := setupEcho(nil, logger)
+	dbService := db.NewGormDBService(gormDB)
+	e := setupEcho(dbService, logger)
 	logger.Info("Init echo server successfully")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
