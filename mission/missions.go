@@ -8,6 +8,12 @@ import (
 	"github.com/eli-yip/rocket-control/models"
 )
 
+var MissionServiceInstance *MissionService
+
+func InitMissionService(db db.Iface) {
+	MissionServiceInstance = NewMissionService(db)
+}
+
 type MissionService struct {
 	db db.Iface
 	m  sync.Map

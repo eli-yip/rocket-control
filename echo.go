@@ -11,6 +11,7 @@ import (
 
 	"github.com/eli-yip/rocket-control/controller"
 	"github.com/eli-yip/rocket-control/db"
+	"github.com/eli-yip/rocket-control/mission"
 )
 
 func setupEcho(db db.Iface, logger *zap.Logger) (e *echo.Echo) {
@@ -75,6 +76,12 @@ func setupEcho(db db.Iface, logger *zap.Logger) (e *echo.Echo) {
 	diagnosticAPI.GET("", diagnosticHandler.GetDiagnosticList)
 	diagnosticAPI.POST("", diagnosticHandler.CreateDiagnostic)
 	diagnosticAPI.PATCH("/:id", diagnosticHandler.UpdateDiagnosticStatus)
+
+	mission.InitMissionService(db)
+	rocketHandler := controller.NewRocketController(mission.MissionServiceInstance)
+	rocketAPI := apiGroup.Group("/rocket")
+	rocketAPI.Use(InjectUser())
+	rocketAPI.GET("", rocketHandler.JoinMission)
 
 	// iterate all routes and log them
 	for _, r := range e.Routes() {
