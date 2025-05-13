@@ -201,6 +201,10 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 		s.handleRocketSettingEvent(event)
 		return
 
+	case db.EventTypeTriggerPower, db.EventTypeTriggerComms, db.EventTypeTriggerNav, db.EventTypeTriggerLife:
+		s.handleRocketBoolSettingEvent(event)
+		return
+
 	// 直接影响火箭状态的事件
 	case db.EventTypeHullChange, db.EventTypeFuelChange, db.EventTypeOxygenChange, db.EventTypeTempChange, db.EventTypePressureChange:
 		s.handleRocketStatusEvent(event)
@@ -245,6 +249,37 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event) {
 	// Save updated settings to db
 	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
 		s.logger.Error("failed to update rocket settings in db", zap.Error(err))
+		return
+	}
+
+	// Broadcast the event to all members
+	s.broadcast(event)
+}
+
+func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	val, err := strconv.ParseBool(event.Value)
+	if err != nil {
+		s.logger.Warn("invalid value for rocket bool setting event", zap.String("value", event.Value), zap.Error(err))
+		return
+	}
+
+	switch event.EventType {
+	case db.EventTypeTriggerPower:
+		s.settings.Power = val
+	case db.EventTypeTriggerComms:
+		s.settings.Comms = val
+	case db.EventTypeTriggerNav:
+		s.settings.Nav = val
+	case db.EventTypeTriggerLife:
+		s.settings.Life = val
+	}
+
+	// Save updated settings to db
+	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
+		s.logger.Error("failed to update rocket bool settings in db", zap.Error(err))
 		return
 	}
 

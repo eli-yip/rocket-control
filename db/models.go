@@ -163,6 +163,12 @@ const (
 	EventTypeCusomCancel EventType = "custom_cancel"
 
 	// 通过影响火箭设置来影响火箭状态的事件
+	// 布尔值
+	EventTypeTriggerPower EventType = "power"
+	EventTypeTriggerComms EventType = "comms"
+	EventTypeTriggerNav   EventType = "nav"
+	EventTypeTriggerLife  EventType = "life"
+
 	EventTypeThrust     EventType = "thrust"
 	EventTypeAlt        EventType = "altitude"
 	EventTypeFuel       EventType = "fuel"
