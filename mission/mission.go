@@ -300,19 +300,109 @@ func (s *SingleMissionService) broadcast(event models.Event) {
 func (s *SingleMissionService) adjustStatus() {
 	s.logger.Info("adjust status started")
 
-	ticker := time.NewTicker(500 * time.Microsecond)
+	ticker := time.NewTicker(1 * time.Second) // 调整为 1 秒，便于观察
 	defer ticker.Stop()
+
+	// 阈值定义
+	const (
+		hullMin     = 20.0
+		fuelMin     = 10.0
+		oxygenMin   = 10.0
+		tempMax     = 90.0
+		pressureMin = 15.0
+		pressureMax = 95.0
+	)
 
 	for {
 		select {
 		case <-ticker.C:
-			// TODO: 处理状态调整
 			s.lock.Lock()
-			s.status.HullLevel -= 0.1
-			s.status.FuelLevel -= 0.1
-			s.status.OxygenLevel -= 0.1
-			s.status.TemperatureLevel += 0.1
-			s.status.PressureLevel += 0.1
+			// 记录旧值用于判断是否突破阈值
+			oldStatus := *s.status
+
+			// 1. 根据 settings 调整 status
+			// HullLevel 缓慢下降
+			s.status.HullLevel -= 0.05
+			if s.status.HullLevel < 0 {
+				s.status.HullLevel = 0
+			}
+			// FuelLevel 消耗与 Thrust 相关
+			s.status.FuelLevel -= 0.1 + 0.2*s.settings.Thrust/100
+			if s.status.FuelLevel < 0 {
+				s.status.FuelLevel = 0
+			}
+			// OxygenLevel 消耗与 Life 支持和 Thrust 相关
+			oxygenRate := 0.05
+			if s.settings.Life {
+				oxygenRate += 0.05
+			}
+			oxygenRate += 0.1 * s.settings.Thrust / 100
+			s.status.OxygenLevel -= oxygenRate
+			if s.status.OxygenLevel < 0 {
+				s.status.OxygenLevel = 0
+			}
+			// 温度与 Thrust 和 PowerLevel 相关
+			tempDelta := 0.05*s.settings.Thrust + 0.03*s.settings.PowerLevel
+			s.status.TemperatureLevel += tempDelta - 0.1 // 有一定冷却
+			if s.status.TemperatureLevel < 0 {
+				s.status.TemperatureLevel = 0
+			}
+			// 压力与 Altitude 和 Fuel 相关
+			pressureDelta := 0.05*s.settings.Altitude - 0.03*s.settings.Fuel
+			s.status.PressureLevel += pressureDelta
+			if s.status.PressureLevel < 0 {
+				s.status.PressureLevel = 0
+			}
+
+			// 2. 写入数据库
+			if err := s.db.UpdateSystemStatus(s.info.ID, *s.status); err != nil {
+				s.logger.Error("failed to update rocket status in db", zap.Error(err))
+			}
+
+			// 3. 变化后发送 event 到前端
+			// 只要有变化就发送
+			statusEvents := []struct {
+				typ   db.EventType
+				val   float64
+				field string
+			}{
+				{db.EventTypeHullChange, s.status.HullLevel, "HullLevel"},
+				{db.EventTypeFuelChange, s.status.FuelLevel, "FuelLevel"},
+				{db.EventTypeOxygenChange, s.status.OxygenLevel, "OxygenLevel"},
+				{db.EventTypeTempChange, s.status.TemperatureLevel, "TemperatureLevel"},
+				{db.EventTypePressureChange, s.status.PressureLevel, "PressureLevel"},
+			}
+			for _, ev := range statusEvents {
+				event := models.Event{
+					EventType: ev.typ,
+					Value:     strconv.FormatFloat(ev.val, 'f', 2, 64),
+					CreatedBy: "system",
+				}
+				s.broadcast(event)
+			}
+
+			// 4. 阈值触发诊断（只要有一项突破阈值就触发）
+			triggerDiag := false
+			if oldStatus.HullLevel >= hullMin && s.status.HullLevel < hullMin {
+				triggerDiag = true
+			}
+			if oldStatus.FuelLevel >= fuelMin && s.status.FuelLevel < fuelMin {
+				triggerDiag = true
+			}
+			if oldStatus.OxygenLevel >= oxygenMin && s.status.OxygenLevel < oxygenMin {
+				triggerDiag = true
+			}
+			if oldStatus.TemperatureLevel <= tempMax && s.status.TemperatureLevel > tempMax {
+				triggerDiag = true
+			}
+			if (oldStatus.PressureLevel >= pressureMin && s.status.PressureLevel < pressureMin) ||
+				(oldStatus.PressureLevel <= pressureMax && s.status.PressureLevel > pressureMax) {
+				triggerDiag = true
+			}
+			if triggerDiag {
+				go s.doDiagnostic()
+			}
+
 			s.lock.Unlock()
 		case <-s.done:
 			s.logger.Info("adjust status stopped")
@@ -380,4 +470,6 @@ func shouldAccident(duration time.Duration, successRate float64) bool {
 	return rand.Float64() < effectiveFailureRate
 }
 
-func (s *SingleMissionService) doDiagnostic()
+func (s *SingleMissionService) doDiagnostic() {
+	// TODO: 实现诊断逻辑
+}
