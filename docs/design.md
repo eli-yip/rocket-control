@@ -49,5 +49,6 @@ CRUD 类型的接口仅仅实现了 Mission 管理和 Diagnostic 获取，还需
 - [ ] Accident 管理
 - [ ] Alarm 管理
 - [ ] 一些常见的优化（比如分页）
+- [ ] 使用 Go embed 将前端嵌入后端中
 
 Event Processor 缺少对于一些事件的处理，但是每一类的事件已经至少实现了一个实例。

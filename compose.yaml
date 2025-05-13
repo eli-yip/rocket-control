@@ -1,0 +1,18 @@
+services:
+  rocket-control:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rocket-control
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.toml:/app/config.toml
+
+  rocket-control-db:
+    image: postgres:17.4-alpine
+    container_name: rocket-control-db
+    environment:
+      POSTGRES_USER: rocket_control
+      POSTGRES_PASSWORD: rocket_control
+      POSTGRES_DB: rocket_control
