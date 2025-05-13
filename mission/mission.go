@@ -1,6 +1,7 @@
 package mission
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -16,16 +17,17 @@ import (
 )
 
 type SingleMissionService struct {
-	db            db.MockDB
-	info          *db.Mission
-	settings      *db.RocketSetting
-	status        *db.RocketStatus
-	lock          sync.Mutex
-	members       map[string]chan models.WsMessage
-	events        chan models.Event
-	accidentEvent chan models.Event
-	logger        *zap.Logger
-	done          chan struct{}
+	db               db.MockDB
+	info             *db.Mission
+	settings         *db.RocketSetting
+	status           *db.RocketStatus
+	lock             sync.Mutex
+	members          map[string]chan models.WsMessage
+	events           chan models.Event
+	accidentEvent    chan models.Event
+	logger           *zap.Logger
+	done             chan struct{}
+	customCancelCtxs sync.Map // key: parent event id (uint), value: context.CancelFunc
 }
 
 const eventBufferSize = 1000
@@ -153,7 +155,9 @@ func (s *SingleMissionService) process() {
 		case event := <-s.events:
 			switch event.EventType {
 			case db.EventTypeCustomAdd:
-				s.processComplexEvent(event)
+				go s.processComplexEvent(event)
+			case db.EventTypeCusomCancel:
+				s.cancelCustomProgram(event.Value)
 			default:
 				s.processNormalEvent(event)
 			}
@@ -161,20 +165,128 @@ func (s *SingleMissionService) process() {
 	}
 }
 
+// 完整实现自定义程序事件的逐步执行与取消
 func (s *SingleMissionService) processComplexEvent(event models.Event) {
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing custom event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
+
+	// 创建可取消的 context
+	ctx, cancel := context.WithCancel(context.Background())
+	s.customCancelCtxs.Store(event.ID, cancel)
+	defer s.customCancelCtxs.Delete(event.ID)
+
+	// 广播开始
+	event.Status = db.EventStatusInProgress
+	s.broadcast(event)
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusInProgress)
+
 	steps, err := s.db.GetCusomProgram(event.ID)
 	if err != nil {
 		event.Status = db.EventStatusFailed
 		s.logger.Error("failed to get custom program", zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		go s.broadcast(event)
+		s.broadcast(event)
 		return
 	}
 
-	for range steps {
-		// TODO: 处理自定义程序的每一步
+	for idx, step := range steps {
+		select {
+		case <-ctx.Done():
+			logger.Info("custom program cancelled", zap.Int("step", idx))
+			event.Status = db.EventStatusCancelled
+			_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCancelled)
+			s.broadcast(event)
+			return
+		default:
+		}
+
+		// 创建子事件
+		sub, err := s.db.AddSubEvent(s.info.ID, event.ID, step.EventType, step.Value, event.CreatedBy)
+		subEvent := models.Event{
+			ID:        sub.ID,
+			EventType: step.EventType,
+			Status:    db.EventStatusPending,
+			Value:     step.Value,
+			CreatedBy: event.CreatedBy,
+		}
+		if err != nil {
+			logger.Error("failed to add subevent", zap.Error(err))
+			subEvent.Status = db.EventStatusFailed
+			s.broadcast(subEvent)
+			// 主事件失败
+			event.Status = db.EventStatusFailed
+			_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+			s.broadcast(event)
+			return
+		}
+		subEvent.ID = sub.ID
+		subEvent.Status = db.EventStatusInProgress
+		_ = s.db.UpdateEventStatus(subEvent.ID, db.EventStatusInProgress)
+		s.broadcast(subEvent)
+
+		// 直接调用普通事件处理逻辑
+		// 检查子事件是否执行失败
+		failed := false
+		switch step.EventType {
+		case db.EventTypeThrust, db.EventTypeAlt, db.EventTypeFuel, db.EventTypeSpeed, db.EventTypeTemp,
+			db.EventTypeStabilizer, db.EventTypeOxygen, db.EventTypeOrbit, db.EventTypePowerLevel, db.EventTypePressure:
+			failed = !s.handleRocketSettingEvent(subEvent, logger)
+		case db.EventTypeTriggerPower, db.EventTypeTriggerComms, db.EventTypeTriggerNav, db.EventTypeTriggerLife:
+			failed = !s.handleRocketBoolSettingEvent(subEvent, logger)
+		case db.EventTypeHullChange, db.EventTypeFuelChange, db.EventTypeOxygenChange, db.EventTypeTempChange, db.EventTypePressureChange:
+			failed = !s.handleRocketStatusEvent(subEvent, logger)
+		default:
+			s.processNormalEvent(subEvent)
+			// 这里无法判断失败，假设成功
+		}
+		if failed {
+			subEvent.Status = db.EventStatusFailed
+			_ = s.db.UpdateEventStatus(subEvent.ID, db.EventStatusFailed)
+			s.broadcast(subEvent)
+			// 主事件失败
+			event.Status = db.EventStatusFailed
+			_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+			s.broadcast(event)
+			return
+		}
+
+		_ = s.db.UpdateEventStatus(subEvent.ID, db.EventStatusCompleted)
+		subEvent.Status = db.EventStatusCompleted
+		s.broadcast(subEvent)
+
+		// 等待 duration
+		select {
+		case <-ctx.Done():
+			logger.Info("custom program cancelled during wait", zap.Int("step", idx))
+			event.Status = db.EventStatusCancelled
+			_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCancelled)
+			s.broadcast(event)
+			return
+		case <-time.After(time.Duration(step.Duration) * time.Millisecond):
+		}
+	}
+
+	// 全部完成
+	event.Status = db.EventStatusCompleted
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
+	s.broadcast(event)
+}
+
+// 取消自定义程序执行
+func (s *SingleMissionService) cancelCustomProgram(val string) {
+	// val 是父 event id
+	id, err := strconv.ParseUint(val, 10, 64)
+	if err != nil {
+		s.logger.Warn("invalid custom cancel value", zap.String("val", val), zap.Error(err))
+		return
+	}
+	cancelAny, ok := s.customCancelCtxs.Load(uint(id))
+	if ok {
+		cancel := cancelAny.(context.CancelFunc)
+		cancel()
+		s.logger.Info("custom program cancelled", zap.Uint64("event_id", id))
+	} else {
+		s.logger.Warn("no running custom program to cancel", zap.Uint64("event_id", id))
 	}
 }
 
@@ -244,7 +356,7 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 }
 
 // handleRocketSettingEvent updates rocket settings, saves to db, and broadcasts.
-func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logger *zap.Logger) {
+func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logger *zap.Logger) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -252,8 +364,8 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logg
 	if err != nil {
 		logger.Warn("invalid value for rocket setting event", zap.String("value", event.Value), zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	switch event.EventType {
@@ -279,20 +391,19 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logg
 		s.settings.Pressure = val
 	}
 
-	// Save updated settings to db
 	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
 		logger.Error("failed to update rocket settings in db", zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
-	// Broadcast the event to all members
 	s.broadcast(event)
+	return true
 }
 
-func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, logger *zap.Logger) {
+func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, logger *zap.Logger) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -300,8 +411,8 @@ func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, 
 	if err != nil {
 		logger.Warn("invalid value for rocket bool setting event", zap.String("value", event.Value), zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	switch event.EventType {
@@ -315,20 +426,19 @@ func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, 
 		s.settings.Life = val
 	}
 
-	// Save updated settings to db
 	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
 		logger.Error("failed to update rocket bool settings in db", zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
-	// Broadcast the event to all members
 	s.broadcast(event)
+	return true
 }
 
-func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logger *zap.Logger) {
+func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logger *zap.Logger) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -336,8 +446,8 @@ func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logge
 	if err != nil {
 		logger.Warn("invalid value for rocket status event", zap.String("value", event.Value), zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	switch event.EventType {
@@ -356,12 +466,13 @@ func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logge
 	if err := s.db.UpdateSystemStatus(s.info.ID, *s.status); err != nil {
 		logger.Error("failed to update rocket settings in db", zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		s.broadcast(event) // 广播失败事件
-		return
+		s.broadcast(event)
+		return false
 	}
 
 	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	s.broadcast(event)
+	return true
 }
 
 // parseEventValueToFloat parses the event value string to float64.
