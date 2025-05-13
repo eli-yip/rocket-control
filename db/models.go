@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type MockDB interface {
+type Iface interface {
 	MissionIface
 	SystemStateIface
 	CustomProgramIface
@@ -226,3 +226,10 @@ type Accident struct {
 	Desc  string       `gorm:"type:text"`                        // 事故描述
 	Steps pgtype.JSONB `gorm:"type:jsonb;default:'[]';not null"` // 事故内容
 }
+
+// --- 实现结构体声明 ---
+type MissionService struct{ *gorm.DB }
+type SystemStateService struct{ *gorm.DB }
+type CustomProgramService struct{ *gorm.DB }
+type EventService struct{ *gorm.DB }
+type AccidentService struct{ *gorm.DB }

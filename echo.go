@@ -13,7 +13,7 @@ import (
 	"github.com/eli-yip/rocket-control/db"
 )
 
-func setupEcho(db db.MockDB, logger *zap.Logger) (e *echo.Echo) {
+func setupEcho(db db.Iface, logger *zap.Logger) (e *echo.Echo) {
 	e = echo.New()
 	e.HideBanner = true
 	e.HidePort = true

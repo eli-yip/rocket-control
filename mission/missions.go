@@ -9,11 +9,11 @@ import (
 )
 
 type MissionService struct {
-	db db.MockDB
+	db db.Iface
 	m  sync.Map
 }
 
-func NewMissionService(db db.MockDB) *MissionService {
+func NewMissionService(db db.Iface) *MissionService {
 	return &MissionService{db: db}
 }
 

@@ -17,7 +17,7 @@ import (
 )
 
 type SingleMissionService struct {
-	db               db.MockDB
+	db               db.Iface
 	info             *db.Mission
 	settings         *db.RocketSetting
 	status           *db.RocketStatus
@@ -32,7 +32,7 @@ type SingleMissionService struct {
 
 const eventBufferSize = 1000
 
-func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionService, err error) {
+func NewSingleMissionService(db db.Iface, missionID uint) (sms *SingleMissionService, err error) {
 	mission, err := db.GetMission(missionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mission: %w", err)
