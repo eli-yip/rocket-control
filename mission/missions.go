@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/eli-yip/rocket-control/db"
+	"github.com/eli-yip/rocket-control/models"
 )
 
 type MissionService struct {
@@ -34,7 +35,7 @@ func (ms *MissionService) AddMission(id uint) (err error) {
 	return nil
 }
 
-func (ms *MissionService) JoinMission(id uint, user string) (<-chan Event, error) {
+func (ms *MissionService) JoinMission(id uint, user string) (<-chan models.WsMessage, error) {
 	v, ok := ms.m.Load(id)
 	if !ok {
 		return nil, ErrMissionNotFound
@@ -52,7 +53,7 @@ func (ms *MissionService) LeaveMission(id uint, user string) (err error) {
 	return sms.LeaveMission(user)
 }
 
-func (ms *MissionService) GetCommChannel(id uint, user string) (<-chan Event, error) {
+func (ms *MissionService) GetCommChannel(id uint, user string) (<-chan models.WsMessage, error) {
 	v, ok := ms.m.Load(id)
 	if !ok {
 		return nil, ErrMissionNotFound
@@ -61,7 +62,7 @@ func (ms *MissionService) GetCommChannel(id uint, user string) (<-chan Event, er
 	return sms.GetCommChannel(user)
 }
 
-func (ms *MissionService) AddEvent(id uint, event Event) {
+func (ms *MissionService) AddEvent(id uint, event models.Event) {
 	v, ok := ms.m.Load(id)
 	if !ok {
 		return

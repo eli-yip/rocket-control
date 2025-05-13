@@ -9,16 +9,10 @@ import (
 
 	"github.com/eli-yip/rocket-control/db"
 	"github.com/eli-yip/rocket-control/log"
+	"github.com/eli-yip/rocket-control/models"
+
 	"go.uber.org/zap"
 )
-
-type Event struct {
-	ID        uint
-	EventType db.EventType
-	Status    db.EventStatus
-	Value     string
-	CreatedBy string
-}
 
 type SingleMissionService struct {
 	db            db.MockDB
@@ -26,9 +20,9 @@ type SingleMissionService struct {
 	settings      *db.RocketSetting
 	status        *db.RocketStatus
 	lock          sync.Mutex
-	members       map[string]chan Event
-	events        chan Event
-	accidentEvent chan Event
+	members       map[string]chan models.WsMessage
+	events        chan models.Event
+	accidentEvent chan models.Event
 	logger        *zap.Logger
 	done          chan struct{}
 }
@@ -52,15 +46,15 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 		settings: &systemState.RocketSetting,
 		status:   &systemState.RocketStatus,
 		lock:     sync.Mutex{},
-		members:  make(map[string]chan Event),
-		events:   make(chan Event, eventBufferSize),
+		members:  make(map[string]chan models.WsMessage),
+		events:   make(chan models.Event, eventBufferSize),
 		logger:   log.DefaultLogger.With(zap.Uint("mission", mission.ID)),
 	}
 
 	return sms, nil
 }
 
-func (s *SingleMissionService) JoinMission(user string) (<-chan Event, error) {
+func (s *SingleMissionService) JoinMission(user string) (<-chan models.WsMessage, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -68,7 +62,7 @@ func (s *SingleMissionService) JoinMission(user string) (<-chan Event, error) {
 		return nil, fmt.Errorf("user %s already joined", user)
 	}
 
-	ch := make(chan Event, eventBufferSize)
+	ch := make(chan models.WsMessage, eventBufferSize)
 	s.members[user] = ch
 
 	if len(s.members) == 1 {
@@ -80,7 +74,7 @@ func (s *SingleMissionService) JoinMission(user string) (<-chan Event, error) {
 		go s.processAccident()
 	}
 
-	joinEvent := Event{
+	joinEvent := models.Event{
 		EventType: db.EventTypeJoin,
 		CreatedBy: user,
 		Value:     user,
@@ -99,7 +93,7 @@ func (s *SingleMissionService) LeaveMission(user string) (err error) {
 		return fmt.Errorf("user %s not found", user)
 	}
 
-	leaveEvent := Event{
+	leaveEvent := models.Event{
 		EventType: db.EventTypeLeave,
 		CreatedBy: user,
 		Value:     user,
@@ -118,7 +112,7 @@ func (s *SingleMissionService) LeaveMission(user string) (err error) {
 	return nil
 }
 
-func (s *SingleMissionService) GetCommChannel(user string) (<-chan Event, error) {
+func (s *SingleMissionService) GetCommChannel(user string) (<-chan models.WsMessage, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -129,11 +123,11 @@ func (s *SingleMissionService) GetCommChannel(user string) (<-chan Event, error)
 	return ch, nil
 }
 
-func (s *SingleMissionService) AddEvent(event Event) {
+func (s *SingleMissionService) AddEvent(event models.Event) {
 	e, err := s.db.AddEvent(s.info.ID, event.EventType, event.Value, event.CreatedBy)
 	if err != nil {
 		s.logger.Error("failed to add event", zap.Error(err))
-		errEvent := Event{
+		errEvent := models.Event{
 			EventType: event.EventType,
 			Status:    db.EventStatusFailed,
 			CreatedBy: event.CreatedBy,
@@ -164,7 +158,7 @@ func (s *SingleMissionService) process() {
 	}
 }
 
-func (s *SingleMissionService) processComplexEvent(event Event) {
+func (s *SingleMissionService) processComplexEvent(event models.Event) {
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing custom event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
 	steps, err := s.db.GetCusomProgram(event.ID)
@@ -181,7 +175,7 @@ func (s *SingleMissionService) processComplexEvent(event Event) {
 	}
 }
 
-func (s *SingleMissionService) processNormalEvent(event Event) {
+func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	// TODO: 处理事件
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
@@ -189,10 +183,10 @@ func (s *SingleMissionService) processNormalEvent(event Event) {
 
 func (s *SingleMissionService) adjustSettings()
 
-func (s *SingleMissionService) broadcast(event Event) {
+func (s *SingleMissionService) broadcast(event models.Event) {
 	for id, ch := range s.members {
 		select {
-		case ch <- event:
+		case ch <- event.ToWsMessage("event processed"):
 		default:
 			s.logger.Warn("failed to send event to user", zap.String("user", id), zap.Error(fmt.Errorf("channel is full")))
 		}

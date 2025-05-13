@@ -8,8 +8,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/eli-yip/rocket-control/db"
 	"github.com/eli-yip/rocket-control/mission"
+	"github.com/eli-yip/rocket-control/models"
 	"github.com/labstack/echo/v4"
 	"github.com/rezakhademix/govalidator/v2"
 	"go.uber.org/zap"
@@ -22,13 +22,6 @@ type RocketController struct {
 func NewRocketController(missionService *mission.MissionService) *RocketController {
 	return &RocketController{missionService: missionService}
 }
-
-type Action struct {
-	Type  db.EventType `json:"type"`
-	Value string       `json:"value"`
-}
-
-type WsMessage struct{}
 
 func (h *RocketController) JoinMission(c echo.Context) (err error) {
 	logger := ExtractLogger(c)
@@ -74,12 +67,11 @@ func (h *RocketController) JoinMission(c echo.Context) (err error) {
 			case <-ctx.Done():
 				return
 			default:
-				var action Action
+				var action models.Action
 				if err := wsjson.Read(ctx, ws, &action); err != nil {
 					// TODO: handle error
 				}
-				event := actionToEvent(action)
-				go h.missionService.AddEvent(missionID, event)
+				go h.missionService.AddEvent(missionID, action.ToEvent(user))
 			}
 		}
 	}()
@@ -88,10 +80,9 @@ func (h *RocketController) JoinMission(c echo.Context) (err error) {
 		select {
 		case <-ctx.Done():
 			return nil
-		case e := <-messageCh:
-			message := eventToMessage(e)
+		case m := <-messageCh:
 			writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			err = wsjson.Write(writeCtx, ws, message)
+			err = wsjson.Write(writeCtx, ws, m)
 			cancel()
 			if err != nil {
 				logger.Error("failed to write message to websocket", zap.Error(err))
@@ -100,7 +91,3 @@ func (h *RocketController) JoinMission(c echo.Context) (err error) {
 		}
 	}
 }
-
-func actionToEvent(action Action) mission.Event
-
-func eventToMessage(event mission.Event) WsMessage

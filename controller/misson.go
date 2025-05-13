@@ -10,7 +10,6 @@ import (
 )
 
 type (
-	// TODO: 使用 https://github.com/rezakhademix/govalidator 校验数据
 	AddMissionRequest struct {
 		Name     string `json:"name"`
 		Duration int    `json:"duration"`
