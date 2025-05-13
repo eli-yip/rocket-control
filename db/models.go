@@ -9,6 +9,9 @@ import (
 
 type MockDB interface {
 	MissionIface
+	SystemStateIface
+	CustomProgramIface
+	EventIface
 }
 
 type baseModel struct {
@@ -61,6 +64,10 @@ type Mission struct {
 	CreatedBy   string        `gorm:"type:text"`        // 创建者
 }
 
+type SystemStateIface interface {
+	GetSystemState(missionID uint) (*SystemState, error)
+}
+
 type SystemState struct {
 	baseModel
 	MissionID uint `gorm:"index"`
@@ -103,6 +110,10 @@ type SystemPreset struct {
 	RocketSetting
 }
 
+type CustomProgramIface interface {
+	GetCusomProgram(id uint) (ProgramSteps, error)
+}
+
 // 自定义火箭程序的单步操作
 type ProgramStep struct {
 	EventType EventType `gorm:"type:text"` // 事件类型
@@ -120,9 +131,16 @@ type CustomProgram struct {
 	Steps    pgtype.JSONB `gorm:"type:jsonb;default:'[]';not null"` // 程序步骤
 }
 
+type EventIface interface {
+	AddEvent(missionID uint, eventType EventType, value string, createdBy string) (*Event, error)
+	UpdateEventStatus(id uint, status EventStatus) error
+}
+
 type EventType string
 
 const (
+	EventTypeErr EventType = "error"
+
 	EventTypeJoin  EventType = "join"
 	EventTypeLeave EventType = "leave"
 
@@ -134,8 +152,10 @@ const (
 	EventTypeDiagnose      EventType = "diagnose"
 	EventTypeClearDiagnose EventType = "clear_diagnose"
 
+	EventTypeCustomAdd   EventType = "custom_add"
+	EventTypeCusomCancel EventType = "custom_cancel"
+
 	// 通过影响火箭设置来影响火箭状态的事件
-	EventTypeCustom     EventType = "custom"
 	EventTypeThrust     EventType = "thrust"
 	EventTypeAlt        EventType = "altitude"
 	EventTypeFuel       EventType = "fuel"
@@ -155,22 +175,25 @@ const (
 	EventTypePressureChange EventType = "pressure_change"
 )
 
+type EventStatus int
+
+const (
+	EventStatusPending EventStatus = iota
+	EventStatusInProgress
+	EventStatusCompleted
+	EventStatusFailed
+	EventStatusCancelled
+)
+
 type Event struct {
 	baseModel
-	MissionID uint      `gorm:"index"`
-	CreatedBy string    `gorm:"type:text"` // 创建者
-	Desc      string    `gorm:"type:text"` // 事件描述
-	PartOf    uint      `gorm:"index"`     // 父事件
-	Type      EventType `gorm:"type:text"`
-	Value     string    `gorm:"type:text"`
-}
-
-// TODO: 使用时序数据库储存遥测数据
-type Telemetry struct {
-	baseModel
-	MissionID uint `gorm:"index"`
-	RocketSetting
-	RocketStatus
+	MissionID uint        `gorm:"index"`
+	CreatedBy string      `gorm:"type:text"` // 创建者
+	Desc      string      `gorm:"type:text"` // 事件描述
+	PartOf    uint        `gorm:"index"`     // 父事件
+	Status    EventStatus `gorm:"type:int"`  // 事件状态
+	Type      EventType   `gorm:"type:text"`
+	Value     string      `gorm:"type:text"`
 }
 
 type DiagnosticIface any

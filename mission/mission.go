@@ -1,0 +1,229 @@
+package mission
+
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/eli-yip/rocket-control/db"
+	"github.com/eli-yip/rocket-control/log"
+	"go.uber.org/zap"
+)
+
+type Event struct {
+	ID        uint
+	EventType db.EventType
+	Status    db.EventStatus
+	Value     string
+	CreatedBy string
+}
+
+type SingleMissionService struct {
+	db       db.MockDB
+	info     *db.Mission
+	settings *db.RocketSetting
+	status   *db.RocketStatus
+	lock     sync.Mutex
+	members  map[string]chan<- Event
+	events   chan Event
+	logger   *zap.Logger
+	done     chan struct{}
+}
+
+const eventBufferSize = 1000
+
+func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionService, err error) {
+	mission, err := db.GetMission(missionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get mission: %w", err)
+	}
+
+	systemState, err := db.GetSystemState(missionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system state: %w", err)
+	}
+
+	sms = &SingleMissionService{
+		db:       db,
+		info:     mission,
+		settings: &systemState.RocketSetting,
+		status:   &systemState.RocketStatus,
+		lock:     sync.Mutex{},
+		members:  make(map[string]chan<- Event),
+		events:   make(chan Event, eventBufferSize),
+		logger:   log.DefaultLogger.With(zap.Uint("mission", mission.ID)),
+	}
+
+	go sms.Process()
+	go sms.AdjustStatus()
+	go sms.Telemetry()
+
+	return sms, nil
+}
+
+func (s *SingleMissionService) JoinMission(user string) (chan<- Event, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if _, exists := s.members[user]; exists {
+		return nil, fmt.Errorf("user %s already joined", user)
+	}
+
+	ch := make(chan Event, eventBufferSize)
+	s.members[user] = ch
+
+	joinEvent := Event{
+		EventType: db.EventTypeJoin,
+		CreatedBy: user,
+		Value:     user,
+	}
+
+	go s.AddEvent(joinEvent)
+
+	return ch, nil
+}
+
+func (s *SingleMissionService) LeaveMission(user string) (err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if _, exists := s.members[user]; !exists {
+		return fmt.Errorf("user %s not found", user)
+	}
+
+	leaveEvent := Event{
+		EventType: db.EventTypeLeave,
+		CreatedBy: user,
+		Value:     user,
+	}
+
+	go s.AddEvent(leaveEvent)
+
+	close(s.members[user])
+	delete(s.members, user)
+	return nil
+}
+
+func (s *SingleMissionService) GetCommChannel(user string) (chan<- Event, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	ch, exists := s.members[user]
+	if !exists {
+		return nil, fmt.Errorf("user %s not found", user)
+	}
+	return ch, nil
+}
+
+func (s *SingleMissionService) AddEvent(event Event) {
+	e, err := s.db.AddEvent(s.info.ID, event.EventType, event.Value, event.CreatedBy)
+	if err != nil {
+		s.logger.Error("failed to add event", zap.Error(err))
+		errEvent := Event{
+			EventType: event.EventType,
+			Status:    db.EventStatusFailed,
+			CreatedBy: event.CreatedBy,
+			Value:     event.Value,
+		}
+		s.events <- errEvent
+		return
+	}
+	event.ID = e.ID
+	s.events <- event
+}
+
+func (s *SingleMissionService) Process() {
+	// TODO: 记录前端发来事件的时间戳，在一定时间范围内重新计算事件先后再执行
+	for {
+		select {
+		case <-s.done:
+			s.logger.Info("mission service stopped")
+			return
+		case event := <-s.events:
+			switch event.EventType {
+			case db.EventTypeCustomAdd:
+				s.ProcessComplexEvent(event)
+			default:
+				s.processNormalEvent(event)
+			}
+		}
+	}
+}
+
+func (s *SingleMissionService) ProcessComplexEvent(event Event) {
+	logger := s.logger.With(zap.Uint("e_id", event.ID))
+	logger.Info("processing custom event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
+	steps, err := s.db.GetCusomProgram(event.ID)
+	if err != nil {
+		event.Status = db.EventStatusFailed
+		s.logger.Error("failed to get custom program", zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		go s.Broadcast(event)
+		return
+	}
+
+	for range steps {
+		// TODO: 处理自定义程序的每一步
+	}
+}
+
+func (s *SingleMissionService) processNormalEvent(event Event) {
+	// TODO: 处理事件
+	logger := s.logger.With(zap.Uint("e_id", event.ID))
+	logger.Info("processing event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
+}
+
+func (s *SingleMissionService) AdjustSettings()
+
+func (s *SingleMissionService) Broadcast(event Event) {
+	for id, ch := range s.members {
+		select {
+		case ch <- event:
+		default:
+			s.logger.Warn("failed to send event to user", zap.String("user", id), zap.Error(fmt.Errorf("channel is full")))
+		}
+	}
+}
+
+func (s *SingleMissionService) AdjustStatus() {
+	s.logger.Info("adjust status started")
+
+	ticker := time.NewTicker(500 * time.Microsecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// TODO: 处理状态调整
+			s.lock.Lock()
+			s.status.HullLevel -= 0.1
+			s.status.FuelLevel -= 0.1
+			s.status.OxygenLevel -= 0.1
+			s.status.TemperatureLevel += 0.1
+			s.status.PressureLevel += 0.1
+			s.lock.Unlock()
+		case <-s.done:
+			s.logger.Info("adjust status stopped")
+			return
+		}
+	}
+}
+
+func (s *SingleMissionService) DoDiagnostic()
+
+func (s *SingleMissionService) Telemetry() {
+	s.logger.Info("telemetry started")
+
+	ticker := time.NewTicker(500 * time.Microsecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.logger.Info("telemetry", zap.Any("status", s.status), zap.Any("settings", s.settings))
+		case <-s.done:
+			s.logger.Info("telemetry stopped")
+			return
+		}
+	}
+}
