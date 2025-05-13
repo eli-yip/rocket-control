@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/coder/websocket v1.8.13 // indirect
 	github.com/eli-yip/echo-pprof v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
