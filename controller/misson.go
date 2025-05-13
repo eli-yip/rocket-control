@@ -58,6 +58,14 @@ func (h *MissionHandler) AddMission(c echo.Context) (err error) {
 	return
 }
 
-func (h *MissionHandler) GetMission(c echo.Context) (err error)
-func (h *MissionHandler) GetMissionList(c echo.Context) (err error)
-func (h *MissionHandler) UpdateMissionStatus(c echo.Context) (err error)
+func (h *MissionHandler) GetMission(c echo.Context) (err error) {
+	return nil
+}
+
+func (h *MissionHandler) GetMissionList(c echo.Context) (err error) {
+	return nil
+}
+
+func (h *MissionHandler) UpdateMissionStatus(c echo.Context) (err error) {
+	return nil
+}

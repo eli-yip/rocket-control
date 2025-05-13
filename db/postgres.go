@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/eli-yip/rocket-control/config"
+	"github.com/jackc/pgx/pgtype"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -157,6 +158,44 @@ func (s *AccidentService) GetRandomAccident() (ProgramSteps, error) {
 	return steps, nil
 }
 
+func (s *DiagnosticService) CreateDiagnostic(missionID uint, createdBy, desc string, result any) (*Diagnostic, error) {
+	var resultJSON pgtype.JSONB
+	if err := resultJSON.Set(result); err != nil {
+		return nil, err
+	}
+	d := &Diagnostic{
+		MissionID: missionID,
+		CreatedBy: createdBy,
+		Status:    DiagnosticStatusCompleted, // 默认直接完成
+		Result:    resultJSON,
+		Desc:      desc,
+	}
+	if err := s.Create(d).Error; err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (s *DiagnosticService) GetDiagnostic(id uint) (*Diagnostic, error) {
+	var d Diagnostic
+	if err := s.First(&d, id).Error; err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (s *DiagnosticService) GetDiagnosticList(missionID uint) ([]*Diagnostic, error) {
+	var ds []*Diagnostic
+	if err := s.Where("mission_id = ?", missionID).Order("created_at desc").Find(&ds).Error; err != nil {
+		return nil, err
+	}
+	return ds, nil
+}
+
+func (s *DiagnosticService) UpdateDiagnosticStatus(id uint, status DiagnosticStatus) error {
+	return s.Model(&Diagnostic{}).Where("id = ?", id).Update("status", status).Error
+}
+
 // --- 工厂函数，返回所有接口实现 ---
 type GormDBService struct {
 	*gorm.DB
@@ -165,6 +204,7 @@ type GormDBService struct {
 	*CustomProgramService
 	*EventService
 	*AccidentService
+	*DiagnosticService
 }
 
 func NewGormDBService(db *gorm.DB) Iface {
@@ -175,5 +215,6 @@ func NewGormDBService(db *gorm.DB) Iface {
 		CustomProgramService: &CustomProgramService{db},
 		EventService:         &EventService{db},
 		AccidentService:      &AccidentService{db},
+		DiagnosticService:    &DiagnosticService{db},
 	}
 }

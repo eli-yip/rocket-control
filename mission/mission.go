@@ -329,9 +329,10 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	case db.EventTypeTest:
 
 	case db.EventTypeDiagnoseStart:
-	case db.EventTypeDiagnoseClear:
+		handled = true
+		go s.doDiagnosticWithEvent(event)
 
-	case db.EventTypeCusomCancel:
+	case db.EventTypeAlarmClear:
 
 	// Rocket setting events
 	case db.EventTypeThrust, db.EventTypeAlt, db.EventTypeFuel, db.EventTypeSpeed, db.EventTypeTemp,
@@ -353,6 +354,85 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	if !handled {
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	}
+}
+
+// doDiagnosticWithEvent: 执行诊断并广播结果
+func (s *SingleMissionService) doDiagnosticWithEvent(event models.Event) {
+	s.logger.Info("starting diagnostic", zap.String("by", event.CreatedBy))
+	// 标记事件为进行中
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusInProgress)
+	s.broadcast(models.Event{
+		ID:        event.ID,
+		EventType: db.EventTypeDiagnoseStart,
+		Status:    db.EventStatusInProgress,
+		CreatedBy: event.CreatedBy,
+	})
+
+	// 执行诊断逻辑
+	result, desc := s.doDiagnosticResult()
+	diag, err := s.db.CreateDiagnostic(s.info.ID, event.CreatedBy, desc, result)
+	if err != nil {
+		s.logger.Error("failed to create diagnostic", zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(models.Event{
+			ID:        event.ID,
+			EventType: db.EventTypeDiagnoseStart,
+			Status:    db.EventStatusFailed,
+			CreatedBy: event.CreatedBy,
+		})
+		return
+	}
+
+	// 广播诊断结果事件
+	resultEvent := models.Event{
+		ID:        diag.ID,
+		EventType: db.EventTypeDiagnoseResult,
+		Status:    db.EventStatusCompleted,
+		CreatedBy: event.CreatedBy,
+		Value:     desc,
+	}
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
+	s.broadcast(resultEvent)
+}
+
+// doDiagnosticResult: 生成诊断结果和描述
+func (s *SingleMissionService) doDiagnosticResult() (map[string]interface{}, string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	result := map[string]interface{}{
+		"hull":        s.status.HullLevel,
+		"fuel":        s.status.FuelLevel,
+		"oxygen":      s.status.OxygenLevel,
+		"temperature": s.status.TemperatureLevel,
+		"pressure":    s.status.PressureLevel,
+		"power":       s.settings.PowerLevel,
+		"thrust":      s.settings.Thrust,
+		"altitude":    s.settings.Altitude,
+		"life":        s.settings.Life,
+		"comms":       s.settings.Comms,
+		"nav":         s.settings.Nav,
+	}
+	// 简单诊断描述
+	desc := ""
+	if s.status.HullLevel < 20 {
+		desc += "Hull integrity low. "
+	}
+	if s.status.FuelLevel < 10 {
+		desc += "Fuel low. "
+	}
+	if s.status.OxygenLevel < 10 {
+		desc += "Oxygen low. "
+	}
+	if s.status.TemperatureLevel > 90 {
+		desc += "Temperature high. "
+	}
+	if s.status.PressureLevel < 15 || s.status.PressureLevel > 95 {
+		desc += "Pressure abnormal. "
+	}
+	if desc == "" {
+		desc = "All systems nominal."
+	}
+	return result, desc
 }
 
 // handleRocketSettingEvent updates rocket settings, saves to db, and broadcasts.

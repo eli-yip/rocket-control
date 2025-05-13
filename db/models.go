@@ -13,6 +13,7 @@ type Iface interface {
 	CustomProgramIface
 	EventIface
 	AccidentIface
+	DiagnosticIface
 }
 
 type baseModel struct {
@@ -160,7 +161,9 @@ const (
 
 	EventTypeDiagnoseStart  EventType = "diagnose"
 	EventTypeDiagnoseResult EventType = "diagnose_result"
-	EventTypeDiagnoseClear  EventType = "clear_diagnose"
+
+	EventTypeAlarmSet   EventType = "set_alarm"
+	EventTypeAlarmClear EventType = "clear_alarm"
 
 	EventTypeCustomAdd   EventType = "custom_add"
 	EventTypeCusomCancel EventType = "custom_cancel"
@@ -212,9 +215,30 @@ type Event struct {
 	Value     string      `gorm:"type:text"`
 }
 
-type DiagnosticIface any
+type DiagnosticStatus int
 
-type Diagnostic struct{}
+const (
+	DiagnosticStatusPending DiagnosticStatus = iota
+	DiagnosticStatusRunning
+	DiagnosticStatusCompleted
+	DiagnosticStatusFailed
+)
+
+type Diagnostic struct {
+	baseModel
+	MissionID uint             `gorm:"index" json:"mission_id"`
+	CreatedBy string           `gorm:"type:text" json:"created_by"`
+	Status    DiagnosticStatus `gorm:"type:int" json:"status"`
+	Result    pgtype.JSONB     `gorm:"type:jsonb;default:'{}';not null" json:"result"`
+	Desc      string           `gorm:"type:text" json:"desc"`
+}
+
+type DiagnosticIface interface {
+	CreateDiagnostic(missionID uint, createdBy, desc string, result any) (*Diagnostic, error)
+	GetDiagnostic(id uint) (*Diagnostic, error)
+	GetDiagnosticList(missionID uint) ([]*Diagnostic, error)
+	UpdateDiagnosticStatus(id uint, status DiagnosticStatus) error
+}
 
 type AccidentIface interface {
 	GetRandomAccident() (ProgramSteps, error)
@@ -233,3 +257,4 @@ type SystemStateService struct{ *gorm.DB }
 type CustomProgramService struct{ *gorm.DB }
 type EventService struct{ *gorm.DB }
 type AccidentService struct{ *gorm.DB }
+type DiagnosticService struct{ *gorm.DB }
