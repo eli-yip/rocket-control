@@ -67,6 +67,7 @@ type Mission struct {
 
 type SystemStateIface interface {
 	GetSystemState(missionID uint) (*SystemState, error)
+	UpdateSystemSetting(missionID uint, setting RocketSetting) (err error)
 }
 
 type SystemState struct {
@@ -153,9 +154,9 @@ const (
 
 	EventTypeAccident EventType = "accident"
 
-	EventTypeStartDiagnose  EventType = "diagnose"
+	EventTypeDiagnoseStart  EventType = "diagnose"
 	EventTypeDiagnoseResult EventType = "diagnose_result"
-	EventTypeClearDiagnose  EventType = "clear_diagnose"
+	EventTypeDiagnoseClear  EventType = "clear_diagnose"
 
 	EventTypeCustomAdd   EventType = "custom_add"
 	EventTypeCusomCancel EventType = "custom_cancel"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"strconv"
 	"sync"
 	"time"
 
@@ -176,12 +177,86 @@ func (s *SingleMissionService) processComplexEvent(event models.Event) {
 }
 
 func (s *SingleMissionService) processNormalEvent(event models.Event) {
-	// TODO: 处理事件
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
+	switch event.EventType {
+	case db.EventTypeJoin, db.EventTypeLeave:
+
+	case db.EventTypeErr:
+
+	case db.EventTypeLanuch:
+	case db.EventTypeAbort:
+	case db.EventTypeLand:
+	case db.EventTypeTest:
+
+	case db.EventTypeDiagnoseStart:
+	case db.EventTypeDiagnoseClear:
+
+	case db.EventTypeCustomAdd:
+	case db.EventTypeCusomCancel:
+
+	// Rocket setting events
+	case db.EventTypeThrust, db.EventTypeAlt, db.EventTypeFuel, db.EventTypeSpeed, db.EventTypeTemp,
+		db.EventTypeStabilizer, db.EventTypeOxygen, db.EventTypeOrbit, db.EventTypePowerLevel, db.EventTypePressure:
+		s.handleRocketSettingEvent(event)
+		return
+
+	case db.EventTypeHullChange:
+	case db.EventTypeFuelChange:
+	case db.EventTypeOxygenChange:
+	case db.EventTypeTempChange:
+	case db.EventTypePressureChange:
+	}
 }
 
-func (s *SingleMissionService) adjustSettings()
+// handleRocketSettingEvent updates rocket settings, saves to db, and broadcasts.
+func (s *SingleMissionService) handleRocketSettingEvent(event models.Event) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	val, err := parseEventValueToFloat(event.Value)
+	if err != nil {
+		s.logger.Warn("invalid value for rocket setting event", zap.String("value", event.Value), zap.Error(err))
+		return
+	}
+
+	switch event.EventType {
+	case db.EventTypeThrust:
+		s.settings.Thrust = val
+	case db.EventTypeAlt:
+		s.settings.Altitude = val
+	case db.EventTypeFuel:
+		s.settings.Fuel = val
+	case db.EventTypeSpeed:
+		s.settings.Speed = val
+	case db.EventTypeTemp:
+		s.settings.Temperature = val
+	case db.EventTypeStabilizer:
+		s.settings.Stabilizer = val
+	case db.EventTypeOxygen:
+		s.settings.Oxygen = val
+	case db.EventTypeOrbit:
+		s.settings.Orbit = val
+	case db.EventTypePowerLevel:
+		s.settings.PowerLevel = val
+	case db.EventTypePressure:
+		s.settings.Pressure = val
+	}
+
+	// Save updated settings to db
+	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
+		s.logger.Error("failed to update rocket settings in db", zap.Error(err))
+		return
+	}
+
+	// Broadcast the event to all members
+	s.broadcast(event)
+}
+
+// parseEventValueToFloat parses the event value string to float64.
+func parseEventValueToFloat(val string) (float64, error) {
+	return strconv.ParseFloat(val, 64)
+}
 
 func (s *SingleMissionService) broadcast(event models.Event) {
 	for id, ch := range s.members {
