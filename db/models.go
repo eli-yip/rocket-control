@@ -12,6 +12,7 @@ type MockDB interface {
 	SystemStateIface
 	CustomProgramIface
 	EventIface
+	AccidentIface
 }
 
 type baseModel struct {
@@ -116,9 +117,10 @@ type CustomProgramIface interface {
 
 // 自定义火箭程序的单步操作
 type ProgramStep struct {
-	EventType EventType `gorm:"type:text"` // 事件类型
-	Desc      string    `gorm:"type:text"` // 事件描述
-	Duration  int       `gorm:"type:int"`  // 持续时间（秒）
+	EventType EventType `gorm:"type:text" json:"event_type"` // 事件类型
+	Value     string    `gorm:"type:text" json:"value"`      // 事件值
+	Desc      string    `gorm:"type:text" json:"desc"`       // 事件描述
+	Duration  int       `gorm:"type:int" json:"duration"`    // 事件持续时间
 }
 
 type ProgramSteps []ProgramStep
@@ -149,8 +151,11 @@ const (
 	EventTypeLand   EventType = "land"
 	EventTypeTest   EventType = "test"
 
-	EventTypeDiagnose      EventType = "diagnose"
-	EventTypeClearDiagnose EventType = "clear_diagnose"
+	EventTypeAccident EventType = "accident"
+
+	EventTypeStartDiagnose  EventType = "diagnose"
+	EventTypeDiagnoseResult EventType = "diagnose_result"
+	EventTypeClearDiagnose  EventType = "clear_diagnose"
 
 	EventTypeCustomAdd   EventType = "custom_add"
 	EventTypeCusomCancel EventType = "custom_cancel"
@@ -199,3 +204,14 @@ type Event struct {
 type DiagnosticIface any
 
 type Diagnostic struct{}
+
+type AccidentIface interface {
+	GetRandomAccident() (ProgramSteps, error)
+}
+
+type Accident struct {
+	baseModel
+	Name  string       `gorm:"unique,type:text"`                 // 事故名称
+	Desc  string       `gorm:"type:text"`                        // 事故描述
+	Steps pgtype.JSONB `gorm:"type:jsonb;default:'[]';not null"` // 事故内容
+}

@@ -2,6 +2,8 @@ package mission
 
 import (
 	"fmt"
+	"math"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -19,15 +21,16 @@ type Event struct {
 }
 
 type SingleMissionService struct {
-	db       db.MockDB
-	info     *db.Mission
-	settings *db.RocketSetting
-	status   *db.RocketStatus
-	lock     sync.Mutex
-	members  map[string]chan Event
-	events   chan Event
-	logger   *zap.Logger
-	done     chan struct{}
+	db            db.MockDB
+	info          *db.Mission
+	settings      *db.RocketSetting
+	status        *db.RocketStatus
+	lock          sync.Mutex
+	members       map[string]chan Event
+	events        chan Event
+	accidentEvent chan Event
+	logger        *zap.Logger
+	done          chan struct{}
 }
 
 const eventBufferSize = 1000
@@ -57,6 +60,8 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 	go sms.process()
 	go sms.adjustStatus()
 	go sms.telemetry()
+	go sms.accident()
+	go sms.processAccident()
 
 	return sms, nil
 }
@@ -209,8 +214,6 @@ func (s *SingleMissionService) adjustStatus() {
 	}
 }
 
-func (s *SingleMissionService) doDiagnostic()
-
 func (s *SingleMissionService) telemetry() {
 	s.logger.Info("telemetry started")
 
@@ -227,3 +230,47 @@ func (s *SingleMissionService) telemetry() {
 		}
 	}
 }
+
+const accidentTimeWindow = 5 * time.Minute
+
+func (s *SingleMissionService) accident() {
+	ticker := time.NewTicker(accidentTimeWindow)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			successRate := s.settings.Stabilizer
+			if !shouldAccident(accidentTimeWindow, successRate) {
+				continue
+			}
+			s.logger.Info("accident occurred")
+			a, err := s.db.GetRandomAccident()
+			if err != nil {
+				s.logger.Error("failed to get random accident", zap.Error(err))
+				continue
+			}
+			for range a {
+				// TODO: 向 accidentCh 发送事故事件
+			}
+		case <-s.done:
+			s.logger.Info("accident check stopped")
+			return
+		}
+	}
+}
+
+func (s *SingleMissionService) processAccident() {
+	// TODO: 处理事故事件，和 processNormalEvent 类似
+}
+
+func shouldAccident(duration time.Duration, successRate float64) bool {
+	if successRate < 0 || successRate > 1 {
+		return false
+	}
+	failureRate := 1.0 - successRate
+	effectiveFailureRate := 1.0 - math.Exp(-failureRate*float64(duration)/float64(accidentTimeWindow))
+	return rand.Float64() < effectiveFailureRate
+}
+
+func (s *SingleMissionService) doDiagnostic()
