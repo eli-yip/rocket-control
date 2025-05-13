@@ -184,6 +184,9 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	var handled bool
 	switch event.EventType {
 	case db.EventTypeJoin, db.EventTypeLeave:
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
+		s.broadcast(event)
+		handled = true
 
 	case db.EventTypeErr:
 
@@ -195,7 +198,6 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	case db.EventTypeDiagnoseStart:
 	case db.EventTypeDiagnoseClear:
 
-	case db.EventTypeCustomAdd:
 	case db.EventTypeCusomCancel:
 
 	// Rocket setting events
