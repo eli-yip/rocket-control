@@ -54,9 +54,9 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 		logger:   log.DefaultLogger.With(zap.Uint("mission", mission.ID)),
 	}
 
-	go sms.Process()
-	go sms.AdjustStatus()
-	go sms.Telemetry()
+	go sms.process()
+	go sms.adjustStatus()
+	go sms.telemetry()
 
 	return sms, nil
 }
@@ -132,7 +132,7 @@ func (s *SingleMissionService) AddEvent(event Event) {
 	s.events <- event
 }
 
-func (s *SingleMissionService) Process() {
+func (s *SingleMissionService) process() {
 	// TODO: 记录前端发来事件的时间戳，在一定时间范围内重新计算事件先后再执行
 	for {
 		select {
@@ -142,7 +142,7 @@ func (s *SingleMissionService) Process() {
 		case event := <-s.events:
 			switch event.EventType {
 			case db.EventTypeCustomAdd:
-				s.ProcessComplexEvent(event)
+				s.processComplexEvent(event)
 			default:
 				s.processNormalEvent(event)
 			}
@@ -150,7 +150,7 @@ func (s *SingleMissionService) Process() {
 	}
 }
 
-func (s *SingleMissionService) ProcessComplexEvent(event Event) {
+func (s *SingleMissionService) processComplexEvent(event Event) {
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing custom event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
 	steps, err := s.db.GetCusomProgram(event.ID)
@@ -158,7 +158,7 @@ func (s *SingleMissionService) ProcessComplexEvent(event Event) {
 		event.Status = db.EventStatusFailed
 		s.logger.Error("failed to get custom program", zap.Error(err))
 		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
-		go s.Broadcast(event)
+		go s.broadcast(event)
 		return
 	}
 
@@ -173,9 +173,9 @@ func (s *SingleMissionService) processNormalEvent(event Event) {
 	logger.Info("processing event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
 }
 
-func (s *SingleMissionService) AdjustSettings()
+func (s *SingleMissionService) adjustSettings()
 
-func (s *SingleMissionService) Broadcast(event Event) {
+func (s *SingleMissionService) broadcast(event Event) {
 	for id, ch := range s.members {
 		select {
 		case ch <- event:
@@ -185,7 +185,7 @@ func (s *SingleMissionService) Broadcast(event Event) {
 	}
 }
 
-func (s *SingleMissionService) AdjustStatus() {
+func (s *SingleMissionService) adjustStatus() {
 	s.logger.Info("adjust status started")
 
 	ticker := time.NewTicker(500 * time.Microsecond)
@@ -209,9 +209,9 @@ func (s *SingleMissionService) AdjustStatus() {
 	}
 }
 
-func (s *SingleMissionService) DoDiagnostic()
+func (s *SingleMissionService) doDiagnostic()
 
-func (s *SingleMissionService) Telemetry() {
+func (s *SingleMissionService) telemetry() {
 	s.logger.Info("telemetry started")
 
 	ticker := time.NewTicker(500 * time.Microsecond)
