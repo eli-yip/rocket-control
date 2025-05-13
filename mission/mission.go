@@ -188,9 +188,30 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 		s.broadcast(event)
 		handled = true
 
+	case db.EventTypeLanuch:
+		handled = true
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusInProgress)
+		for i := 10; i >= 1; i-- {
+			val := strconv.Itoa(i)
+			s.broadcast(models.Event{
+				ID:        event.ID,
+				EventType: db.EventTypeLanuch,
+				Status:    db.EventStatusInProgress,
+				Value:     val,
+				CreatedBy: event.CreatedBy,
+			})
+			time.Sleep(1 * time.Second)
+		}
+		// 发射成功，更新状态
+		s.lock.Lock()
+		s.status.Launched = true
+		_ = s.db.UpdateSystemStatus(s.info.ID, *s.status)
+		s.lock.Unlock()
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
+		s.broadcast(event)
+
 	case db.EventTypeErr:
 
-	case db.EventTypeLanuch:
 	case db.EventTypeAbort:
 	case db.EventTypeLand:
 	case db.EventTypeTest:

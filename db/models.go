@@ -99,6 +99,8 @@ type RocketSetting struct {
 }
 
 type RocketStatus struct {
+	Launched bool `gorm:"type:bool"` // 是否发射
+
 	HullLevel        float64 `gorm:"type:float"` // 船体完整性
 	FuelLevel        float64 `gorm:"type:float"`
 	OxygenLevel      float64 `gorm:"type:float"`
@@ -137,6 +139,7 @@ type CustomProgram struct {
 
 type EventIface interface {
 	AddEvent(missionID uint, eventType EventType, value string, createdBy string) (*Event, error)
+	AddSubEvent(missionID, parentID uint, eventType EventType, value string, createdBy string) (*Event, error)
 	UpdateEventStatus(id uint, status EventStatus) error
 }
 
