@@ -1,0 +1,37 @@
+version: 2
+
+builds:
+  - id: server
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -w -s -X "github.com/eli-yip/rocket-control/version.Version={{ .Tag }}"
+    goos: [darwin, linux]
+    goarch: [arm64, amd64]
+    ignore:
+      - goos: darwin
+        goarch: amd64
+      - goos: linux
+        goarch: arm64
+
+dockers:
+  - goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.goreleaser
+    image_templates:
+      - "eliyip/rocket-control:{{ .Tag }}"
+      - "eliyip/rocket-control:latest"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Tag }}"
+
+archives:
+  - id: server
+    formats: ["tar.gz"]
+    files:
+      - none*
+    ids:
+      - server
+
+release:
+  draft: true
