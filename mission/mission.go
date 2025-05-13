@@ -24,7 +24,7 @@ type SingleMissionService struct {
 	settings *db.RocketSetting
 	status   *db.RocketStatus
 	lock     sync.Mutex
-	members  map[string]chan<- Event
+	members  map[string]chan Event
 	events   chan Event
 	logger   *zap.Logger
 	done     chan struct{}
@@ -49,7 +49,7 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 		settings: &systemState.RocketSetting,
 		status:   &systemState.RocketStatus,
 		lock:     sync.Mutex{},
-		members:  make(map[string]chan<- Event),
+		members:  make(map[string]chan Event),
 		events:   make(chan Event, eventBufferSize),
 		logger:   log.DefaultLogger.With(zap.Uint("mission", mission.ID)),
 	}
@@ -61,7 +61,7 @@ func NewSingleMissionService(db db.MockDB, missionID uint) (sms *SingleMissionSe
 	return sms, nil
 }
 
-func (s *SingleMissionService) JoinMission(user string) (chan<- Event, error) {
+func (s *SingleMissionService) JoinMission(user string) (<-chan Event, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -104,7 +104,7 @@ func (s *SingleMissionService) LeaveMission(user string) (err error) {
 	return nil
 }
 
-func (s *SingleMissionService) GetCommChannel(user string) (chan<- Event, error) {
+func (s *SingleMissionService) GetCommChannel(user string) (<-chan Event, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 

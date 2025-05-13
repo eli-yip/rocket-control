@@ -1,14 +1,71 @@
 package mission
 
-import "sync"
+import (
+	"errors"
+	"sync"
 
-type MissionService struct{ m sync.Map }
+	"github.com/eli-yip/rocket-control/db"
+)
 
-func NewMissionService() *MissionService
+type MissionService struct {
+	db db.MockDB
+	m  sync.Map
+}
 
-func (ms *MissionService) AddMission(id uint) (err error)
+func NewMissionService(db db.MockDB) *MissionService {
+	return &MissionService{db: db}
+}
 
-func (ms *MissionService) JoinMission(id uint, user string) (<-chan Event, error)
-func (ms *MissionService) LeaveMission(id uint, user string) (err error)
-func (ms *MissionService) GetCommChannel(id uint, user string) (<-chan Event, error)
-func (ms *MissionService) AddEvent(id uint, event Event)
+var (
+	ErrMissionAlreadyExists = errors.New("mission already exists")
+	ErrMissionNotFound      = errors.New("mission not found")
+)
+
+func (ms *MissionService) AddMission(id uint) (err error) {
+	if _, ok := ms.m.Load(id); ok {
+		return ErrMissionAlreadyExists
+	}
+
+	sms, err := NewSingleMissionService(ms.db, id)
+	if err != nil {
+		return err
+	}
+	ms.m.Store(id, sms)
+	return nil
+}
+
+func (ms *MissionService) JoinMission(id uint, user string) (<-chan Event, error) {
+	v, ok := ms.m.Load(id)
+	if !ok {
+		return nil, ErrMissionNotFound
+	}
+	sms := v.(*SingleMissionService)
+	return sms.JoinMission(user)
+}
+
+func (ms *MissionService) LeaveMission(id uint, user string) (err error) {
+	v, ok := ms.m.Load(id)
+	if !ok {
+		return ErrMissionNotFound
+	}
+	sms := v.(*SingleMissionService)
+	return sms.LeaveMission(user)
+}
+
+func (ms *MissionService) GetCommChannel(id uint, user string) (<-chan Event, error) {
+	v, ok := ms.m.Load(id)
+	if !ok {
+		return nil, ErrMissionNotFound
+	}
+	sms := v.(*SingleMissionService)
+	return sms.GetCommChannel(user)
+}
+
+func (ms *MissionService) AddEvent(id uint, event Event) {
+	v, ok := ms.m.Load(id)
+	if !ok {
+		return
+	}
+	sms := v.(*SingleMissionService)
+	sms.AddEvent(event)
+}
