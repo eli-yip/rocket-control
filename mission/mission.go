@@ -125,6 +125,7 @@ func (s *SingleMissionService) GetCommChannel(user string) (<-chan models.WsMess
 }
 
 func (s *SingleMissionService) AddEvent(event models.Event) {
+	event.Status = db.EventStatusPending
 	e, err := s.db.AddEvent(s.info.ID, event.EventType, event.Value, event.CreatedBy)
 	if err != nil {
 		s.logger.Error("failed to add event", zap.Error(err))
@@ -135,6 +136,7 @@ func (s *SingleMissionService) AddEvent(event models.Event) {
 			Value:     event.Value,
 		}
 		s.events <- errEvent
+		s.broadcast(errEvent) // 广播失败事件
 		return
 	}
 	event.ID = e.ID
@@ -179,6 +181,7 @@ func (s *SingleMissionService) processComplexEvent(event models.Event) {
 func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	logger := s.logger.With(zap.Uint("e_id", event.ID))
 	logger.Info("processing event", zap.String("event_type", string(event.EventType)), zap.String("value", event.Value))
+	var handled bool
 	switch event.EventType {
 	case db.EventTypeJoin, db.EventTypeLeave:
 
@@ -199,16 +202,21 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 	case db.EventTypeThrust, db.EventTypeAlt, db.EventTypeFuel, db.EventTypeSpeed, db.EventTypeTemp,
 		db.EventTypeStabilizer, db.EventTypeOxygen, db.EventTypeOrbit, db.EventTypePowerLevel, db.EventTypePressure:
 		s.handleRocketSettingEvent(event, logger)
-		return
+		handled = true
 
 	case db.EventTypeTriggerPower, db.EventTypeTriggerComms, db.EventTypeTriggerNav, db.EventTypeTriggerLife:
 		s.handleRocketBoolSettingEvent(event, logger)
-		return
+		handled = true
 
 	// 直接影响火箭状态的事件
 	case db.EventTypeHullChange, db.EventTypeFuelChange, db.EventTypeOxygenChange, db.EventTypeTempChange, db.EventTypePressureChange:
 		s.handleRocketStatusEvent(event, logger)
-		return
+		handled = true
+	}
+
+	// 若未被特殊处理，标记为已完成
+	if !handled {
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	}
 }
 
@@ -220,6 +228,8 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logg
 	val, err := parseEventValueToFloat(event.Value)
 	if err != nil {
 		logger.Warn("invalid value for rocket setting event", zap.String("value", event.Value), zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
 		return
 	}
 
@@ -249,9 +259,12 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event, logg
 	// Save updated settings to db
 	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
 		logger.Error("failed to update rocket settings in db", zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
 		return
 	}
 
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	// Broadcast the event to all members
 	s.broadcast(event)
 }
@@ -263,6 +276,8 @@ func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, 
 	val, err := strconv.ParseBool(event.Value)
 	if err != nil {
 		logger.Warn("invalid value for rocket bool setting event", zap.String("value", event.Value), zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
 		return
 	}
 
@@ -280,9 +295,12 @@ func (s *SingleMissionService) handleRocketBoolSettingEvent(event models.Event, 
 	// Save updated settings to db
 	if err := s.db.UpdateSystemSetting(s.info.ID, *s.settings); err != nil {
 		logger.Error("failed to update rocket bool settings in db", zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
 		return
 	}
 
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	// Broadcast the event to all members
 	s.broadcast(event)
 }
@@ -294,6 +312,8 @@ func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logge
 	val, err := parseEventValueToFloat(event.Value)
 	if err != nil {
 		logger.Warn("invalid value for rocket status event", zap.String("value", event.Value), zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
 		return
 	}
 
@@ -312,8 +332,12 @@ func (s *SingleMissionService) handleRocketStatusEvent(event models.Event, logge
 
 	if err := s.db.UpdateSystemStatus(s.info.ID, *s.status); err != nil {
 		logger.Error("failed to update rocket settings in db", zap.Error(err))
+		_ = s.db.UpdateEventStatus(event.ID, db.EventStatusFailed)
+		s.broadcast(event) // 广播失败事件
+		return
 	}
 
+	_ = s.db.UpdateEventStatus(event.ID, db.EventStatusCompleted)
 	s.broadcast(event)
 }
 
