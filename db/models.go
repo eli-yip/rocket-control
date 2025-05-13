@@ -68,6 +68,7 @@ type Mission struct {
 type SystemStateIface interface {
 	GetSystemState(missionID uint) (*SystemState, error)
 	UpdateSystemSetting(missionID uint, setting RocketSetting) (err error)
+	UpdateSystemStatus(missionID uint, status RocketStatus) (err error)
 }
 
 type SystemState struct {

@@ -201,11 +201,10 @@ func (s *SingleMissionService) processNormalEvent(event models.Event) {
 		s.handleRocketSettingEvent(event)
 		return
 
-	case db.EventTypeHullChange:
-	case db.EventTypeFuelChange:
-	case db.EventTypeOxygenChange:
-	case db.EventTypeTempChange:
-	case db.EventTypePressureChange:
+	// 直接影响火箭状态的事件
+	case db.EventTypeHullChange, db.EventTypeFuelChange, db.EventTypeOxygenChange, db.EventTypeTempChange, db.EventTypePressureChange:
+		s.handleRocketStatusEvent(event)
+		return
 	}
 }
 
@@ -250,6 +249,36 @@ func (s *SingleMissionService) handleRocketSettingEvent(event models.Event) {
 	}
 
 	// Broadcast the event to all members
+	s.broadcast(event)
+}
+
+func (s *SingleMissionService) handleRocketStatusEvent(event models.Event) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	val, err := parseEventValueToFloat(event.Value)
+	if err != nil {
+		s.logger.Warn("invalid value for rocket status event", zap.String("value", event.Value), zap.Error(err))
+		return
+	}
+
+	switch event.EventType {
+	case db.EventTypeHullChange:
+		s.status.HullLevel = val
+	case db.EventTypeFuelChange:
+		s.status.FuelLevel = val
+	case db.EventTypeOxygenChange:
+		s.status.OxygenLevel = val
+	case db.EventTypeTempChange:
+		s.status.TemperatureLevel = val
+	case db.EventTypePressureChange:
+		s.status.PressureLevel = val
+	}
+
+	if err := s.db.UpdateSystemStatus(s.info.ID, *s.status); err != nil {
+		s.logger.Error("failed to update rocket settings in db", zap.Error(err))
+	}
+
 	s.broadcast(event)
 }
 
